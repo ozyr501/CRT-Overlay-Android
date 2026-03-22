@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">CRT Overlay</string>
+    <string name="notification_channel_name">Overlay</string>
+    <string name="notification_title">CRT overlay active</string>
+    <string name="notification_text">Screen is mirrored with a CRT filter. Tap to open settings or stop from the app.</string>
+    <string name="start_overlay">Start overlay</string>
+    <string name="toast_overlay_required">Allow "Display over other apps" first — opening settings…</string>
+    <string name="toast_capture_denied">Screen capture was not granted. CRT filtering needs it to process the picture.</string>
+    <string name="stop_overlay">Stop overlay</string>
+    <string name="open_overlay_permission">Allow display over other apps</string>
+    <string name="open_app_info">Open app info (HyperOS / MIUI)</string>
+    <string name="hint_overlay">This app captures the screen at full resolution and re-draws it through a GPU CRT filter at a low emulated resolution (default 640×480, extended to fill the display).\n\nEffects include curvature, scanlines, RGB slot mask, phosphor bleed, bloom, and vignette — pixel art will look as intended on a CRT.\n\n1) Allow "Display over other apps". 2) Set the emulated CRT size (width × height). 3) Tap Start — allow screen capture.\n\nTouch is not reliable while the overlay is on; use a gamepad or stop the overlay.\n\nOn Xiaomi / Poco (HyperOS): if the overlay list is empty, use "Open app info", then Other permissions → Display over other apps.</string>
+    <string name="scanline_strength">Scanline strength</string>
+    <string name="scanline_spacing">Scanline gap width</string>
+    <string name="vignette_strength">Vignette (edge darkening)</string>
+    <string name="rgb_mask_strength">RGB mask (slot stripes)</string>
+    <string name="curvature_strength">Screen curvature</string>
+    <string name="bloom_strength">Phosphor bloom (highlights)</string>
+    <string name="internal_resolution">Emulated CRT size (min pixels)</string>
+    <string name="internal_width">Width</string>
+    <string name="internal_height">Height</string>
+    <string name="phosphor_bleed">Phosphor bleed (horizontal smear)</string>
+</resources>

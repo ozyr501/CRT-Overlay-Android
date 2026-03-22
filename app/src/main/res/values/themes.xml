@@ -1,0 +1,9 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.CrtOverlay" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/crt_bg</item>
+        <item name="android:navigationBarColor">@color/crt_bg</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+        <item name="colorPrimary">@color/crt_accent</item>
+        <item name="colorSurface">@color/crt_bg</item>
+    </style>
+</resources>
