@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.AdapterView
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -114,7 +115,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * If the user still had the previous default capture size (320×240) stored, bump to 640×480 once.
+     * If the user still had the previous default capture size (320×240) stored, bump to the
+     * current default internal resolution once.
      */
     private fun maybeMigrateDoubleLegacyResolution() {
         val p = getSharedPreferences(CrtPrefs.PREFS_NAME, MODE_PRIVATE)
@@ -131,8 +133,8 @@ class MainActivity : AppCompatActivity() {
         }
         p.edit {
             if (w == 320 && h == 240) {
-                putInt(CrtPrefs.KEY_INTERNAL_WIDTH, 640)
-                putInt(CrtPrefs.KEY_INTERNAL_HEIGHT, 480)
+                putInt(CrtPrefs.KEY_INTERNAL_WIDTH, CrtPrefs.DEFAULT_INTERNAL_WIDTH)
+                putInt(CrtPrefs.KEY_INTERNAL_HEIGHT, CrtPrefs.DEFAULT_INTERNAL_HEIGHT)
             }
             putBoolean(CrtPrefs.KEY_LEGACY_RES_DOUBLED, true)
         }
@@ -140,13 +142,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadPrefsIntoUi() {
         val p = getSharedPreferences(CrtPrefs.PREFS_NAME, MODE_PRIVATE)
-        binding.seekScanAlpha.progress = p.getInt(CrtPrefs.KEY_SCAN_ALPHA, 60).coerceIn(0, 150)
-        binding.seekSpacing.progress = p.getInt(CrtPrefs.KEY_SCAN_SPACING, 3).coerceIn(1, 6)
+        binding.seekScanAlpha.progress = p.getInt(CrtPrefs.KEY_SCAN_ALPHA, 50).coerceIn(0, 150)
+        binding.seekSpacing.progress = p.getInt(CrtPrefs.KEY_SCAN_SPACING, 5).coerceIn(1, 6)
         binding.seekVignette.progress = p.getInt(CrtPrefs.KEY_VIGNETTE, 30)
-        binding.seekRgb.progress = p.getInt(CrtPrefs.KEY_RGB, 25).coerceIn(0, 100)
+        binding.seekRgb.progress = p.getInt(CrtPrefs.KEY_RGB, 12).coerceIn(0, 100)
         binding.seekCurvature.progress = p.getInt(CrtPrefs.KEY_CURVATURE, 35)
-        binding.seekBloom.progress = p.getInt(CrtPrefs.KEY_BLOOM, 35)
-        binding.seekPhosphor.progress = p.getInt(CrtPrefs.KEY_PHOSPHOR_BLEED, 50)
+        binding.seekBloom.progress = p.getInt(CrtPrefs.KEY_BLOOM, 18)
+        binding.seekPhosphor.progress = p.getInt(CrtPrefs.KEY_PHOSPHOR_BLEED, 30)
+        binding.seekColorTemp.progress = p.getInt(CrtPrefs.KEY_COLOR_TEMP, 20)
+        binding.seekBlackLevel.progress = p.getInt(CrtPrefs.KEY_BLACK_LEVEL, 3)
+        binding.seekHalation.progress = p.getInt(CrtPrefs.KEY_HALATION, 15)
+        binding.spinnerMaskType.setSelection(p.getInt(CrtPrefs.KEY_MASK_TYPE, 0).coerceIn(0, 2))
+        binding.seekGamma.progress = p.getInt(CrtPrefs.KEY_GAMMA, 22).coerceIn(18, 30) - 18
         binding.inputInternalWidth.setText(
             p.getInt(CrtPrefs.KEY_INTERNAL_WIDTH, CrtPrefs.DEFAULT_INTERNAL_WIDTH).toString(),
         )
@@ -169,6 +176,11 @@ class MainActivity : AppCompatActivity() {
             putInt(CrtPrefs.KEY_CURVATURE, binding.seekCurvature.progress)
             putInt(CrtPrefs.KEY_BLOOM, binding.seekBloom.progress)
             putInt(CrtPrefs.KEY_PHOSPHOR_BLEED, binding.seekPhosphor.progress)
+            putInt(CrtPrefs.KEY_COLOR_TEMP, binding.seekColorTemp.progress)
+            putInt(CrtPrefs.KEY_BLACK_LEVEL, binding.seekBlackLevel.progress)
+            putInt(CrtPrefs.KEY_HALATION, binding.seekHalation.progress)
+            putInt(CrtPrefs.KEY_MASK_TYPE, binding.spinnerMaskType.selectedItemPosition)
+            putInt(CrtPrefs.KEY_GAMMA, binding.seekGamma.progress + 18)
             if (includeInternalResolution) {
                 val w = parseAndSnapEvenWidth(binding.inputInternalWidth.text?.toString())
                 val h = parseAndSnapEvenHeight(binding.inputInternalHeight.text?.toString())
@@ -227,6 +239,17 @@ class MainActivity : AppCompatActivity() {
         binding.seekCurvature.setOnSeekBarChangeListener(listener)
         binding.seekBloom.setOnSeekBarChangeListener(listener)
         binding.seekPhosphor.setOnSeekBarChangeListener(listener)
+        binding.seekColorTemp.setOnSeekBarChangeListener(listener)
+        binding.seekBlackLevel.setOnSeekBarChangeListener(listener)
+        binding.seekHalation.setOnSeekBarChangeListener(listener)
+        binding.seekGamma.setOnSeekBarChangeListener(listener)
+        binding.spinnerMaskType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, pos: Int, id: Long) {
+                savePrefsFromUi(includeInternalResolution = false)
+                refreshLabels()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
     }
 
     private fun refreshLabels() {
@@ -244,6 +267,19 @@ class MainActivity : AppCompatActivity() {
             " (${binding.seekBloom.progress})"
         binding.labelPhosphor.text = getString(R.string.phosphor_bleed) +
             " (${binding.seekPhosphor.progress}%)"
+        binding.labelColorTemp.text = getString(R.string.color_temp) +
+            " (${binding.seekColorTemp.progress}%)"
+        binding.labelBlackLevel.text = getString(R.string.black_level) +
+            " (${binding.seekBlackLevel.progress})"
+        binding.labelHalation.text = getString(R.string.halation_strength) +
+            " (${binding.seekHalation.progress}%)"
+        val gammaVal = (binding.seekGamma.progress + 18) / 10f
+        binding.labelGamma.text = getString(R.string.gamma_label) +
+            " ($gammaVal)"
+        val maskNames = resources.getStringArray(R.array.mask_type_entries)
+        val maskIdx = binding.spinnerMaskType.selectedItemPosition.coerceIn(0, maskNames.size - 1)
+        binding.labelMaskType.text = getString(R.string.mask_type) +
+            " (${maskNames[maskIdx]})"
         val w = parseAndSnapEvenWidth(binding.inputInternalWidth.text?.toString())
         val h = parseAndSnapEvenHeight(binding.inputInternalHeight.text?.toString())
         binding.labelInternalRes.text = getString(R.string.internal_resolution) +

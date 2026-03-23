@@ -49,6 +49,7 @@ Use this section for anything you log later (remove the placeholder lines when e
 - CRT Overlay version / commit:
 - Ghosting: yes / no / under what conditions:
 - Touch pass-through: OK / fails where:
+- Shader / docs: full-display capture + emulated grid in `crt_frag.glsl`, including adaptive emulated-grid sizing on QHD+ when using default internal resolution; default sliders favour brightness and soft phosphor (see `docs/HOW_THE_APP_WORKS.md`).
 
 ### Changelog (OS)
 
@@ -58,4 +59,4 @@ Use this section for anything you log later (remove the placeholder lines when e
 
 ---
 
-*Last updated from “About phone” screenshot (Settings), March 2026.*
+*Last updated: device table from “About phone” (March 2026); app note added when documentation was aligned with full-res capture + emulated-grid shader.*

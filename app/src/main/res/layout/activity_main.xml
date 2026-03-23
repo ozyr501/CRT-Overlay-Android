@@ -50,7 +50,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="150"
-            android:progress="60" />
+            android:progress="50" />
 
         <TextView
             android:id="@+id/labelSpacing"
@@ -67,7 +67,7 @@
             android:layout_height="wrap_content"
             android:max="6"
             android:min="1"
-            android:progress="3"
+            android:progress="5"
             tools:targetApi="o" />
 
         <TextView
@@ -100,7 +100,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="100"
-            android:progress="25" />
+            android:progress="12" />
 
         <TextView
             android:id="@+id/labelCurvature"
@@ -132,7 +132,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="100"
-            android:progress="35" />
+            android:progress="18" />
 
         <TextView
             android:id="@+id/labelInternalRes"
@@ -196,7 +196,86 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="100"
-            android:progress="50" />
+            android:progress="30" />
+
+        <TextView
+            android:id="@+id/labelColorTemp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/color_temp"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/seekColorTemp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="20" />
+
+        <TextView
+            android:id="@+id/labelBlackLevel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/black_level"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/seekBlackLevel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="20"
+            android:progress="3" />
+
+        <TextView
+            android:id="@+id/labelHalation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/halation_strength"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/seekHalation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="15" />
+
+        <TextView
+            android:id="@+id/labelMaskType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/mask_type"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinnerMaskType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:entries="@array/mask_type_entries" />
+
+        <TextView
+            android:id="@+id/labelGamma"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/gamma_label"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/seekGamma"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="12"
+            android:progress="4" />
 
         <LinearLayout
             android:layout_width="match_parent"

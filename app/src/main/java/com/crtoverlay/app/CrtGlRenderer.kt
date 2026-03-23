@@ -43,6 +43,7 @@ class CrtGlRenderer(
     private var oesSamplingLinearOnly = false
 
     private val stMatrix = FloatArray(16)
+    private var hasRenderedSuccessfully = false
 
     private var aPosition = -1
     private var aTexCoord = -1
@@ -56,6 +57,11 @@ class CrtGlRenderer(
     private var uCurvature = -1
     private var uBloom = -1
     private var uPhosphorBleed = -1
+    private var uColorTemp = -1
+    private var uBlackLevel = -1
+    private var uHalation = -1
+    private var uMaskType = -1
+    private var uGamma = -1
     private var uSampler = -1
 
     private lateinit var vertexBuf: FloatBuffer
@@ -80,6 +86,11 @@ class CrtGlRenderer(
         uCurvature = GLES20.glGetUniformLocation(program, "uCurvature")
         uBloom = GLES20.glGetUniformLocation(program, "uBloom")
         uPhosphorBleed = GLES20.glGetUniformLocation(program, "uPhosphorBleed")
+        uColorTemp = GLES20.glGetUniformLocation(program, "uColorTemp")
+        uBlackLevel = GLES20.glGetUniformLocation(program, "uBlackLevel")
+        uHalation = GLES20.glGetUniformLocation(program, "uHalation")
+        uMaskType = GLES20.glGetUniformLocation(program, "uMaskType")
+        uGamma = GLES20.glGetUniformLocation(program, "uGamma")
         uSampler = GLES20.glGetUniformLocation(program, "sTexture")
 
         val vb = floatArrayOf(
@@ -174,6 +185,56 @@ class CrtGlRenderer(
             emW = userW
             emH = ceil(userW.toFloat() / screenAspect).toInt()
         }
+
+        // Optimization for modern high-res OLED panels:
+        // The phosphor/scan integration blur depends on `minScale = capture / emulated`.
+        // On very high resolutions (e.g., 3200×1440), the default emulated size can lead
+        // to a blurrier-than-intended result. When the user hasn't customized internal
+        // resolution (i.e., still using the defaults), gently increase emulated size so
+        // `minScale` stays around a stable target for both 2400×1080 and 3200×1440.
+        if (userW == CrtPrefs.DEFAULT_INTERNAL_WIDTH &&
+            userH == CrtPrefs.DEFAULT_INTERNAL_HEIGHT &&
+            captureWidth > 0 && captureHeight > 0
+        ) {
+            val targetMinScale = 2.5f
+            val currentMinScale = min(
+                captureWidth.toFloat() / max(emW, 1).toFloat(),
+                captureHeight.toFloat() / max(emH, 1).toFloat()
+            )
+
+            if (currentMinScale > targetMinScale) {
+                // Desired emulated grid size if we target the same "capture->CRT" scale.
+                var desiredW = captureWidth.toFloat() / targetMinScale
+
+                // Keep aspect ratio of the display panel (no letterboxing).
+                var desiredH = desiredW / screenAspect
+
+                // Clamp to allowed limits while preserving aspect as much as possible.
+                if (desiredH > CrtPrefs.INTERNAL_HEIGHT_MAX) {
+                    desiredH = CrtPrefs.INTERNAL_HEIGHT_MAX.toFloat()
+                    desiredW = desiredH * screenAspect
+                }
+                if (desiredW > CrtPrefs.INTERNAL_WIDTH_MAX) {
+                    desiredW = CrtPrefs.INTERNAL_WIDTH_MAX.toFloat()
+                    desiredH = desiredW / screenAspect
+                }
+
+                // Snap to even integers to match how the UI expects values.
+                var newEmW = desiredW.toInt()
+                var newEmH = desiredH.toInt()
+                if (newEmW % 2 != 0) newEmW -= 1
+                if (newEmH % 2 != 0) newEmH -= 1
+                newEmW = newEmW.coerceIn(CrtPrefs.INTERNAL_WIDTH_MIN, CrtPrefs.INTERNAL_WIDTH_MAX)
+                newEmH = newEmH.coerceIn(CrtPrefs.INTERNAL_HEIGHT_MIN, CrtPrefs.INTERNAL_HEIGHT_MAX)
+
+                // Don't violate the "user min" contract; if clamping prevented that, fall back.
+                if (newEmW >= userW && newEmH >= userH) {
+                    emW = newEmW
+                    emH = newEmH
+                }
+            }
+        }
+
         return max(emW, 1).toFloat() to max(emH, 1).toFloat()
     }
 
@@ -183,20 +244,31 @@ class CrtGlRenderer(
         try {
             st.updateTexImage()
         } catch (_: Exception) {
-            GLES20.glClearColor(0f, 0f, 0f, 1f)
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            // When the captured app stops producing frames (e.g., minimized / hidden),
+            // `updateTexImage()` may throw. Don't force-clear the output to black repeatedly;
+            // keep showing the last good frame. If we *never* rendered successfully yet,
+            // fall back to a one-time black clear.
+            if (!hasRenderedSuccessfully) {
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            }
             return
         }
         st.getTransformMatrix(stMatrix)
 
         val p = context.getSharedPreferences(CrtPrefs.PREFS_NAME, Context.MODE_PRIVATE)
-        val scanAlpha = p.getInt(CrtPrefs.KEY_SCAN_ALPHA, 60).coerceIn(0, 150)
-        val spacing = p.getInt(CrtPrefs.KEY_SCAN_SPACING, 3).coerceIn(1, 6)
-        val rgb = p.getInt(CrtPrefs.KEY_RGB, 25).coerceIn(0, 100)
+        val scanAlpha = p.getInt(CrtPrefs.KEY_SCAN_ALPHA, 50).coerceIn(0, 150)
+        val spacing = p.getInt(CrtPrefs.KEY_SCAN_SPACING, 5).coerceIn(1, 6)
+        val rgb = p.getInt(CrtPrefs.KEY_RGB, 12).coerceIn(0, 100)
         val vig = p.getInt(CrtPrefs.KEY_VIGNETTE, 30).coerceIn(0, 100)
         val curv = p.getInt(CrtPrefs.KEY_CURVATURE, 35).coerceIn(0, 100)
-        val bloom = p.getInt(CrtPrefs.KEY_BLOOM, 35).coerceIn(0, 100)
-        val phosphor = p.getInt(CrtPrefs.KEY_PHOSPHOR_BLEED, 50).coerceIn(0, 100)
+        val bloom = p.getInt(CrtPrefs.KEY_BLOOM, 18).coerceIn(0, 100)
+        val phosphor = p.getInt(CrtPrefs.KEY_PHOSPHOR_BLEED, 30).coerceIn(0, 100)
+        val colorTemp = p.getInt(CrtPrefs.KEY_COLOR_TEMP, 20).coerceIn(0, 100)
+        val blackLevel = p.getInt(CrtPrefs.KEY_BLACK_LEVEL, 3).coerceIn(0, 20)
+        val halation = p.getInt(CrtPrefs.KEY_HALATION, 15).coerceIn(0, 100)
+        val maskType = p.getInt(CrtPrefs.KEY_MASK_TYPE, 0).coerceIn(0, 2)
+        val gamma = p.getInt(CrtPrefs.KEY_GAMMA, 22).coerceIn(18, 30)
 
         val scanStrength = min(1.0f, scanAlpha / 120f)
         val maskStrength = min(1.0f, rgb / 100f)
@@ -205,6 +277,10 @@ class CrtGlRenderer(
         val bloomAmt = bloom / 100f
         val phosphorAmt = phosphor / 100f
         val scanSpacingNorm = spacing.toFloat() / 6f
+        val colorTempAmt = colorTemp / 100f
+        val blackLevelAmt = blackLevel / 20f
+        val halationAmt = halation / 100f
+        val gammaVal = gamma / 10f
 
         val (emW, emH) = computeEmulatedSize()
 
@@ -227,6 +303,11 @@ class CrtGlRenderer(
         GLES20.glUniform1f(uCurvature, curvature)
         GLES20.glUniform1f(uBloom, bloomAmt)
         GLES20.glUniform1f(uPhosphorBleed, phosphorAmt)
+        GLES20.glUniform1f(uColorTemp, colorTempAmt)
+        GLES20.glUniform1f(uBlackLevel, blackLevelAmt)
+        GLES20.glUniform1f(uHalation, halationAmt)
+        GLES20.glUniform1i(uMaskType, maskType)
+        GLES20.glUniform1f(uGamma, gammaVal)
 
         GLES20.glEnableVertexAttribArray(aPosition)
         GLES20.glVertexAttribPointer(aPosition, 4, GLES20.GL_FLOAT, false, 0, vertexBuf)
@@ -234,6 +315,7 @@ class CrtGlRenderer(
         GLES20.glVertexAttribPointer(aTexCoord, 4, GLES20.GL_FLOAT, false, 0, texBuf)
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        hasRenderedSuccessfully = true
 
         GLES20.glDisableVertexAttribArray(aPosition)
         GLES20.glDisableVertexAttribArray(aTexCoord)
@@ -263,5 +345,6 @@ class CrtGlRenderer(
         }
         surfaceReadyPosted = false
         oesSamplingLinearOnly = false
+        hasRenderedSuccessfully = false
     }
 }

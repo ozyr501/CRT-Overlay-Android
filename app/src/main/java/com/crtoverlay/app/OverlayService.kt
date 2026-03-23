@@ -14,10 +14,12 @@ import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.hardware.display.VirtualDisplay
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.WindowManager
@@ -37,6 +39,19 @@ class OverlayService : Service(), CrtGlRenderer.CaptureHost {
     private var captureWidth = 0
     private var captureHeight = 0
     private var projectionCallback: MediaProjection.Callback? = null
+
+    // Whether the overlay window is currently visible (alpha=1) or hidden (alpha=0).
+    // SurfaceView lives in a separate SurfaceFlinger layer and ignores View.alpha on its
+    // parent. The only way to actually hide it is WindowManager.updateViewLayout() with
+    // LayoutParams.alpha = 0f.
+    private var overlayWindowVisible: Boolean = true
+
+    // Fallback: if the VirtualDisplay.Callback does not fire on a given device/ROM, we
+    // detect a frame stall and hide the overlay via the same WindowManager path.
+    @Volatile private var lastFrameAtMs: Long = 0L
+    private var frameStallWatcher: Runnable? = null
+    private val frameStallTimeoutMs: Long = 1200L
+    private val frameStallCheckIntervalMs: Long = 250L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -100,6 +115,7 @@ class OverlayService : Service(), CrtGlRenderer.CaptureHost {
             return START_NOT_STICKY
         }
         isRunning = true
+        startFrameStallWatcherIfNeeded()
         return START_STICKY
     }
 
@@ -157,17 +173,49 @@ class OverlayService : Service(), CrtGlRenderer.CaptureHost {
         return params
     }
 
+    /**
+     * Shows or hides the overlay by updating the window-level alpha via [WindowManager].
+     *
+     * Must be called on the main thread.
+     * Using [WindowManager.LayoutParams.alpha] is the only reliable way to hide a window that
+     * contains a [android.view.SurfaceView] with [android.view.SurfaceView.setZOrderOnTop],
+     * because that SurfaceView lives in a separate SurfaceFlinger layer that ignores
+     * [android.view.View.setAlpha] on ancestor views.
+     */
+    private fun setOverlayWindowVisible(visible: Boolean) {
+        if (overlayWindowVisible == visible) return
+        overlayWindowVisible = visible
+        val view = overlayView ?: return
+        val wms = getSystemService(WINDOW_SERVICE) as WindowManager
+        val params = buildOverlayLayoutParams()
+        if (!visible) params.alpha = 0f
+        try {
+            wms.updateViewLayout(view, params)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun attachOverlayIfNeeded(): Boolean {
         if (overlayView != null) return true
         val (w, h) = computeCaptureSize()
         captureWidth = w
         captureHeight = h
+        overlayWindowVisible = true
+        lastFrameAtMs = SystemClock.elapsedRealtime()
 
         val r = CrtGlRenderer(
             applicationContext,
             w,
             h,
-            onFrameAvailable = { overlayView?.requestRender() },
+            onFrameAvailable = {
+                lastFrameAtMs = SystemClock.elapsedRealtime()
+                // Stall-watcher backup: if the overlay was hidden due to a detected stall,
+                // show it again as soon as a real frame arrives.
+                if (!overlayWindowVisible) {
+                    mainHandler.post { setOverlayWindowVisible(true) }
+                }
+                overlayView?.requestRender()
+            },
             host = this,
         )
         renderer = r
@@ -183,6 +231,30 @@ class OverlayService : Service(), CrtGlRenderer.CaptureHost {
             renderer = null
             false
         }
+    }
+
+    /**
+     * Fallback stall-watcher: hides the overlay if no frame arrives within
+     * [frameStallTimeoutMs]. This covers devices/ROMs where [VirtualDisplay.Callback]
+     * does not fire reliably when the captured app is minimized.
+     */
+    private fun startFrameStallWatcherIfNeeded() {
+        if (frameStallWatcher != null) return
+        val watcher = object : Runnable {
+            override fun run() {
+                if (overlayView == null || !isRunning) {
+                    frameStallWatcher = null
+                    return
+                }
+                val dt = SystemClock.elapsedRealtime() - lastFrameAtMs
+                if (dt > frameStallTimeoutMs) {
+                    setOverlayWindowVisible(false)
+                }
+                mainHandler.postDelayed(this, frameStallCheckIntervalMs)
+            }
+        }
+        frameStallWatcher = watcher
+        mainHandler.postDelayed(watcher, frameStallCheckIntervalMs)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -236,6 +308,21 @@ class OverlayService : Service(), CrtGlRenderer.CaptureHost {
             val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
             val cw = captureWidth.coerceAtLeast(2)
             val ch = captureHeight.coerceAtLeast(2)
+
+            // VirtualDisplay.Callback fires when the captured app is paused (minimized /
+            // sent to background in single-app capture mode) or resumed.
+            val vdCallback = object : VirtualDisplay.Callback() {
+                override fun onPaused() {
+                    mainHandler.post { setOverlayWindowVisible(false) }
+                }
+                override fun onResumed() {
+                    mainHandler.post { setOverlayWindowVisible(true) }
+                }
+                override fun onStopped() {
+                    mainHandler.post { tearDownAndStopSelf() }
+                }
+            }
+
             val vd = mp.createVirtualDisplay(
                 "crt_overlay_capture",
                 cw,
@@ -243,8 +330,8 @@ class OverlayService : Service(), CrtGlRenderer.CaptureHost {
                 density,
                 flags,
                 surface,
-                null,
-                null,
+                vdCallback,
+                mainHandler,
             )
             virtualDisplay = vd
             if (vd == null) {
@@ -255,6 +342,9 @@ class OverlayService : Service(), CrtGlRenderer.CaptureHost {
 
     private fun tearDown() {
         isRunning = false
+        frameStallWatcher?.let { mainHandler.removeCallbacks(it) }
+        frameStallWatcher = null
+        overlayWindowVisible = true
         try {
             virtualDisplay?.release()
         } catch (_: Exception) {

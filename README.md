@@ -2,18 +2,18 @@
 
 **Filter Your Screen** and similar Play Store apps sometimes disappear. This app applies a **GPU CRT-style filter** to whatever is on screen: it uses **screen capture** (MediaProjection) into an **OpenGL ES 2** pipeline, then shows the result in a **full-screen overlay** using a **SurfaceView** (opaque compositor layer).
 
-**Product focus:** make **old games**, mainly **pixel-art** titles, look more at home on **modern screens** by emulating CRT-style presentation. **Internal capture resolution** defaults to **640 × 480** and is **user-editable** (width × height fields). See **[Product goals and target resolution](docs/PRODUCT_AND_RESOLUTION.md)**.
+**Product focus:** make **old games**, mainly **pixel-art** titles, look more at home on **modern screens** by emulating CRT-style presentation. The screen is **captured at full display resolution**; the shader downsamples into an **emulated CRT pixel grid** whose **minimum** size defaults to **512 × 384** and is **user-editable** (width × height — the grid is extended as needed to fill the screen aspect). On very high-resolution panels (e.g. QHD+ like 3200×1440), the app may automatically increase the emulated grid (when you keep the defaults) to avoid an overly soft blur. See **[Product goals and target resolution](docs/PRODUCT_AND_RESOLUTION.md)**.
 
 **Touch:** Prefer a **gamepad** or **stop the overlay** to use the touchscreen; **SurfaceView** overlays often **do not** pass touch through to apps below reliably.
 
 ## Documentation
 
-- **[Product goals and target resolution](docs/PRODUCT_AND_RESOLUTION.md)** — why the app exists, 640×480 default capture, editable internal resolution.
+- **[Product goals and target resolution](docs/PRODUCT_AND_RESOLUTION.md)** — why the app exists, 512×384 default emulated grid, full-res capture, editable width/height.
 - **[How the app works](docs/HOW_THE_APP_WORKS.md)** — architecture, components, data flow, permissions.
 - **[Ghosting, touch, and fixes](docs/GHOSTING_TOUCH_AND_FIXES.md)** — ghosting mechanisms, SurfaceView vs TextureView, touch expectations.
 - **[Test device notes](docs/TEST_DEVICE.md)** — handset/OS build used for testing (expand over time).
 
-Effects include **curvature**, **scanline luminance modulation**, **RGB slot-mask-style striping**, **vignette**, **phosphor bloom** on highlights, and **horizontal phosphor bleed**. Sliders and fields map to shader uniforms (changes apply while the overlay runs for effect sliders; changing **width/height** is best applied by restarting the overlay).
+Effects include **curvature**, **Gaussian-style scanlines** (beam-shaped brightness per emulated row), **configurable mask type** (aperture grille / slot mask / shadow mask) as CRT-style RGB modulation, **vignette**, **bloom** on highlights, and **wide phosphor bleed** (soft 5×5 emulated-pixel Gaussian blend, stronger horizontally). The filter also adds CRT-like **halation (glass glow)**, **color temperature / warmth**, **gamma correction**, and an **OLED black level floor** to prevent scanline gaps from looking overly harsh. **Default sliders** aim for a **bright, natural** picture (soft pixels like a good CRT shader, not a dark tinted grid). Sliders and fields map to shader uniforms (effect sliders apply live; changing **emulated width/height** may require **restarting** the overlay).
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Effects include **curvature**, **scanline luminance modulation**, **RGB slot-mas
 
 1. Open **CRT Overlay**.
 2. Allow **Display over other apps** for this app.
-3. Set **internal width × height** (default 640×480) and adjust effect sliders if you want, then tap **Start overlay**.
+3. Set **emulated CRT width × height** (default 512×384 minimum grid) and adjust effect sliders if you want. On high-resolution panels, leaving emulated resolution at defaults enables an auto-boost for more CRT-like sharpness; override manually if you prefer. Then tap **Start overlay**.
 4. Approve **screen capture** when Android asks.
 5. A **persistent notification** appears while the overlay is on. Use **Stop** in the app or the notification action to turn it off (capture ends).
 

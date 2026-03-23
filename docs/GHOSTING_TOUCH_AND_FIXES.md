@@ -39,7 +39,7 @@ If the user can perceive **both** (because of residual compositing quirks or men
 
 **Curvature** exaggerates this: the delayed layer is **warped**; the mental reference is the **unwarped** live UI, so the mismatch reads as a strong double image.
 
-There is **no complete fix** in app code for system-level capture latency. A **lower internal capture resolution** (e.g. 320×240) changes workload and how detail is sampled but does not eliminate lag. Default capture is **640×480**; reduce width/height in settings for a chunkier look.
+There is **no complete fix** in app code for system-level capture latency. A **lower emulated CRT width/height** (e.g. 320×240) changes how chunky the filtered pixels look and slightly reduces fragment-shader work per pixel of output, but **capture stays at display resolution** and does not eliminate lag. **Reduce emulated W×H** in settings for a blockier CRT grid; **reduce curvature** if warping makes lag more noticeable.
 
 ## Touch and SurfaceView
 
